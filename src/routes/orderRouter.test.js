@@ -1,11 +1,25 @@
 const request = require('supertest');
 const app = require('../service');
+const { Role, DB } = require('../database/database.js');
 
 const testUser = { name: 'pizza diner', email: 'reg@test.com', password: 'a' };
-let testUserAuthToken;
+let testUserAuthToken, testUserIdNum;
+
+async function createAdminUser() {
+    let user = { password: 'toomanysecrets', roles: [{ role: Role.Admin }] };
+    user.name = randomName();
+    user.email = user.name + '@admin.com';
+
+    user = await DB.addUser(user);
+    return { ...user, password: 'toomanysecrets' };
+}
+
+function randomName() {
+    return Math.random().toString(36).substring(2, 12);
+}
 
 beforeAll(async () => {
-  testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
+  testUser.email = randomName() + '@test.com';
   const registerRes = await request(app).post('/api/auth').send(testUser);
   testUserAuthToken = registerRes.body.token;
   testUserIdNum = registerRes.body.user.id;
@@ -30,3 +44,17 @@ test('get orders', async () => {
     expect(getRes.status).toBe(200);
     expect(getRes.body.dinerId).toBe(testUserIdNum);
 });
+
+test('add menu unauthorized', async () => {
+    const addRes = await request(app).put('/api/order/menu').set("Authorization", `Bearer ${testUserAuthToken}`);
+    expect(addRes.status).toBe(403);
+});
+
+test('add menu authorized', async() => {
+    const admin = await createAdminUser();
+    const loginRes = await request(app).put('/api/auth').send({email: admin.email, password: admin.password});
+    const menuItem = { "title":`${randomName()}`, "description": "test pizza", "image":"pizza.png", "price": 0.0001 };
+    const addRes = await request(app).put('/api/order/menu').set("Authorization", `Bearer ${loginRes.body.token}`).send(menuItem);
+    expect(addRes.status).toBe(200);
+    expect(addRes.body[addRes.body.length-1]).toMatchObject(menuItem);
+})
