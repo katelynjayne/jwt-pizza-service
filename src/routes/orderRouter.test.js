@@ -11,7 +11,8 @@ async function createAdminUser() {
     user.email = user.name + '@admin.com';
 
     user = await DB.addUser(user);
-    return { ...user, password: 'toomanysecrets' };
+    const loginRes = await request(app).put('/api/auth').send({email: user.email, password: "toomanysecrets"});
+    return loginRes.body.token;
 }
 
 function randomName() {
@@ -32,7 +33,13 @@ test('get menu', async () => {
 });
 
 test('make order', async () => {
-    const req = {"franchiseId": 1, "storeId":1, "items":[{ "menuId": 1, "description": "Veggie", "price": 0.05 }]}
+    const adminToken = await createAdminUser();
+    const new_franchise = {"name": `${randomName()}`, "admins": [{"email": testUser.email}]};
+    const createFranRes = await request(app).post('/api/franchise').set("Authorization", `Bearer ${adminToken}`).send(new_franchise);
+    const createStoreRes = await request(app).post(`/api/franchise/${createFranRes.body.id}/store`).set("Authorization", `Bearer ${adminToken}`).send({"franchiseId": createFranRes.body.id, "name":"test"});
+    const menuItem = { "title":`${randomName()}`, "description": "test pizza", "image":"pizza.png", "price": 0.0001 };
+    const createMenuRes = await request(app).put('/api/order/menu').set("Authorization", `Bearer ${adminToken}`).send(menuItem);
+    const req = {"franchiseId": createFranRes.body.id, "storeId":createStoreRes.body.id, "items":[{ "menuId": createMenuRes.body[createMenuRes.body.length-1].id, "description": "test pizza", "price": 0.0001 }]};
     const orderRes = await request(app).post('/api/order').set("Authorization", `Bearer ${testUserAuthToken}`).send(req);
     expect(orderRes.status).toBe(200);
     expect(orderRes.body.order).toMatchObject(req);
@@ -51,10 +58,9 @@ test('add menu unauthorized', async () => {
 });
 
 test('add menu authorized', async() => {
-    const admin = await createAdminUser();
-    const loginRes = await request(app).put('/api/auth').send({email: admin.email, password: admin.password});
+    const adminToken = await createAdminUser();
     const menuItem = { "title":`${randomName()}`, "description": "test pizza", "image":"pizza.png", "price": 0.0001 };
-    const addRes = await request(app).put('/api/order/menu').set("Authorization", `Bearer ${loginRes.body.token}`).send(menuItem);
+    const addRes = await request(app).put('/api/order/menu').set("Authorization", `Bearer ${adminToken}`).send(menuItem);
     expect(addRes.status).toBe(200);
     expect(addRes.body[addRes.body.length-1]).toMatchObject(menuItem);
 })
