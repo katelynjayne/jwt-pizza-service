@@ -7,9 +7,8 @@ let testUserAuthToken;
 beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
   const registerRes = await request(app).post('/api/auth').send(testUser);
-  const loginRes = await request(app).put('/api/auth').send(testUser);
-  expect(registerRes.body.token === loginRes.body.token);
   testUserAuthToken = registerRes.body.token;
+  testUserIdNum = registerRes.body.user.id;
 });
 
 test('get menu', async () => {
@@ -24,4 +23,10 @@ test('make order', async () => {
     expect(orderRes.status).toBe(200);
     expect(orderRes.body.order).toMatchObject(req);
     expect(orderRes.body.jwt).not.toBeNull();
+});
+
+test('get orders', async () => {
+    const getRes = await request(app).get('/api/order').set("Authorization", `Bearer ${testUserAuthToken}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.dinerId).toBe(testUserIdNum);
 });
