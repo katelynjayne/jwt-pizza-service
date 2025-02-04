@@ -57,12 +57,7 @@ jobs:
               apiKey: '${{ secrets.FACTORY_API_KEY }}',
             },
           };" > src/config.js
-      - name: check config
-        run: |
-          echo "Secret length: $(echo -n "${FACTORY_API_KEY}" | wc -c)"
-        env:
-          FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
-
+  
       - name: Tests
         run: npm test
 
