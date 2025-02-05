@@ -58,16 +58,14 @@ test('create franchise unauthorized', async () => {
     expect(createRes.status).toBe(403);
 });
 
-// test('delete franchise', async () => {
-//     const new_franchise = {"name": `${randomName()}`, "admins": [{"email": franchisee.email}]};
-//     const createRes = await request(app).post('/api/franchise').set("Authorization", `Bearer ${admin.token}`).send(new_franchise);
-//     console.log(createRes.body)
-//     const deleteRes = await request(app).delete(`/api/franchise/${createRes.body.id}`);
-//     expect(deleteRes.status).toBe(200);
-//     const getRes = await request(app).get('/api/franchise');
-//     console.log(getRes.body)
-//     expect(getRes.body).not.toContain({ ...new_franchise, id: createRes.body.id, stores: []});
-// });
+test('delete franchise', async () => {
+    const new_franchise = {"name": `${randomName()}`, "admins": [{"email": franchisee.email}]};
+    const createRes = await request(app).post('/api/franchise').set("Authorization", `Bearer ${admin.token}`).send(new_franchise);
+    const deleteRes = await request(app).delete(`/api/franchise/${createRes.body.id}`).set("Authorization", `Bearer ${admin.token}`);
+    expect(deleteRes.status).toBe(200);
+    const getRes = await request(app).get('/api/franchise');
+    expect(getRes.body).not.toContain({ ...new_franchise, id: createRes.body.id, stores: []});
+});
 
 test('create store', async () => {
     const new_franchise = {"name": `${randomName()}`, "admins": [{"email": franchisee.email}]};
