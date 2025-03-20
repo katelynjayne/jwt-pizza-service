@@ -36,18 +36,26 @@ function requestTracker(req, res, next) {
     requests[method] = (requests[method] || 0) + 1;
     if (req.path == "/api/auth") {
         if (method == "POST" || method == "PUT") {
-            const ogJson = res.json
+            const ogJson = res.json;
             res.json = function (body) {
                 if (body.token) {
-                    users.add(body.token)
+                    users.add(body.token);
                 }
-                ogJson.call(this, body); // Send response as usual
+                ogJson.call(this, body);
             };
-            users.add(res.token);
         }
         if (method == "DELETE") {
-            users.delete(req.headers.authorization.split()[1]);
+            console.log(users.size)
+            users.delete(req.headers.authorization.split(' ')[1]);
+            console.log(users.size)
         }
+    }
+    if (req.headers.authorization) {
+        const ogJson = res.json;
+        res.json = function (body) {
+            checkAuth(res.statusCode)
+            ogJson.call(this, body);
+        };
     }
     next();
 }
@@ -79,13 +87,28 @@ function sysMetrics(metricArray) {
 function userMetrics(metricArray) {
     metricArray.push(makeMetricObj('users','1','sum',users.size));
 }
+let success = 0;
+let failures = 0;
+function checkAuth(statCode) {
+    if (statCode == 200) {
+        success += 1;
+    } else {
+        failures += 1;
+    }
+}
+
+function authMetrics(metricArray) {
+    metricArray.push(makeMetricObj('auth_success','1','sum',success));
+    metricArray.push(makeMetricObj('auth_fail','1','sum',failures));
+}
 
 // This will periodically send metrics to Grafana
-const timer = setInterval(() => {
+setInterval(() => {
     const metricArray = [];
     httpMetrics(metricArray);
     sysMetrics(metricArray);
     userMetrics(metricArray);
+    authMetrics(metricArray);
     sendMetricToGrafana(metricArray);
 }, 10000);
 
