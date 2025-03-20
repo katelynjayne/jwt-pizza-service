@@ -1,7 +1,7 @@
 const config = require('./config.js');
 const os = require('os');
 
-function makeMetricObj(name, unit, type, value, attributes= {}) {
+function makeMetricObj(name, unit, type, value, attributes= {}, dataType="asInt") {
     attributes = { ...attributes, source: config.metrics.source };
     let obj = {
         name: name,
@@ -9,7 +9,7 @@ function makeMetricObj(name, unit, type, value, attributes= {}) {
         [type]: {
             dataPoints: [
                 {
-                    asInt: value,
+                    [dataType]: value,
                     timeUnixNano: Date.now() * 1000000,
                     attributes: []
                 }
@@ -31,7 +31,10 @@ function makeMetricObj(name, unit, type, value, attributes= {}) {
 
 const requests = {};
 const users = new Set();
+const reqTimes = [];
+const pizzaReqTimes = [];
 function requestTracker(req, res, next) {
+    const startTime = Date.now();
     const method = req.method;
     requests[method] = (requests[method] || 0) + 1;
     if (req.path == "/api/auth") {
@@ -41,22 +44,33 @@ function requestTracker(req, res, next) {
                 if (body.token) {
                     users.add(body.token);
                 }
+                checkAuth(res.statusCode);
                 ogJson.call(this, body);
             };
         }
         if (method == "DELETE") {
-            console.log(users.size)
             users.delete(req.headers.authorization.split(' ')[1]);
-            console.log(users.size)
         }
     }
     if (req.headers.authorization) {
         const ogJson = res.json;
         res.json = function (body) {
-            checkAuth(res.statusCode)
+            checkAuth(res.statusCode);
             ogJson.call(this, body);
         };
     }
+    if (req.path == '/api/order' && method == 'POST') {
+        const ogJson = res.json;
+        res.json = function (body) {
+            orderTracker(res.statusCode, body);
+            ogJson.call(this, body);
+        };
+        pizzaReqTimes.push(Date.now()-startTime);
+    }
+    res.on("finish", () => {
+        const endTime = Date.now();
+        reqTimes.push(endTime-startTime);
+    });
     next();
 }
 
@@ -102,6 +116,38 @@ function authMetrics(metricArray) {
     metricArray.push(makeMetricObj('auth_fail','1','sum',failures));
 }
 
+let failedOrders = 0;
+let numOrdered = 0;
+let revenue = 0;
+function orderTracker(stat, body) {
+    if (stat != 200) {
+        failedOrders += 1;
+    } else {
+        numOrdered += body.order.items.length;
+        for (let item of body.order.items) {
+            revenue += item.price;
+        }
+    }
+}
+
+function orderMetrics(metricArray) {
+    metricArray.push(makeMetricObj('ordered','1','sum',numOrdered));
+    metricArray.push(makeMetricObj('order_fail','1','sum', failedOrders));
+    metricArray.push(makeMetricObj('revenue','1','sum',revenue, {},"asDouble"));
+}
+
+function latencyMetrics(metricArray) {
+    if (reqTimes.length > 0) {
+        const reqSum = reqTimes.reduce((a,b)=>a+b);
+        const reqAvg = Math.ceil(reqSum/reqTimes.length);
+        metricArray.push(makeMetricObj('latency', 'ms', 'sum', reqAvg));
+    } if (pizzaReqTimes.length > 0) {
+        const pReqSum = pizzaReqTimes.reduce((a,b)=>a+b);
+        const pReqAvg = Math.ceil(pReqSum/pizzaReqTimes.length);
+        metricArray.push(makeMetricObj('pizza_latency', 'ms', 'sum', pReqAvg));
+    }
+}
+
 // This will periodically send metrics to Grafana
 setInterval(() => {
     const metricArray = [];
@@ -109,6 +155,8 @@ setInterval(() => {
     sysMetrics(metricArray);
     userMetrics(metricArray);
     authMetrics(metricArray);
+    orderMetrics(metricArray);
+    latencyMetrics(metricArray);
     sendMetricToGrafana(metricArray);
 }, 10000);
 
