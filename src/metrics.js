@@ -1,7 +1,7 @@
 const config = require('./config.js');
 const os = require('os');
 
-function makeMetricObj(name, unit, type, value, attributes) {
+function makeMetricObj(name, unit, type, value, attributes= {}) {
     attributes = { ...attributes, source: config.metrics.source };
     let obj = {
         name: name,
@@ -28,22 +28,39 @@ function makeMetricObj(name, unit, type, value, attributes) {
     });
     return obj
 }
+
 const requests = {};
+const users = new Set();
 function requestTracker(req, res, next) {
     const method = req.method;
     requests[method] = (requests[method] || 0) + 1;
+    if (req.path == "/api/auth") {
+        if (method == "POST" || method == "PUT") {
+            const ogJson = res.json
+            res.json = function (body) {
+                if (body.token) {
+                    users.add(body.token)
+                }
+                ogJson.call(this, body); // Send response as usual
+            };
+            users.add(res.token);
+        }
+        if (method == "DELETE") {
+            users.delete(req.headers.authorization.split()[1]);
+        }
+    }
     next();
 }
 
-function sendHttp() {
+function httpMetrics(metricArray) {
     Object.keys(requests).forEach((method) => {
-        sendMetricToGrafana('requests', requests[method], { method });
+        metricArray.push(makeMetricObj('requests','1','sum',requests[method],{ method }))
     });
 }
 
 function getCpuUsagePercentage() {
     const cpuUsage = os.loadavg()[0] / os.cpus().length;
-    return cpuUsage.toFixed(2) * 100;
+    return Math.round(cpuUsage * 100);
 }
 
 function getMemoryUsagePercentage() {
@@ -51,42 +68,34 @@ function getMemoryUsagePercentage() {
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
     const memoryUsage = (usedMemory / totalMemory) * 100;
-    return memoryUsage.toFixed(2);
+    return Math.round(memoryUsage);
 }
 
-function sendSys() {
-    sendMetricToGrafana('cpu', getCpuUsagePercentage, {});
+function sysMetrics(metricArray) {
+    metricArray.push(makeMetricObj('cpu', '%', 'gauge', getCpuUsagePercentage()));
+    metricArray.push(makeMetricObj('memory', '%', 'gauge', getMemoryUsagePercentage()));
+}
+
+function userMetrics(metricArray) {
+    metricArray.push(makeMetricObj('users','1','sum',users.size));
 }
 
 // This will periodically send metrics to Grafana
 const timer = setInterval(() => {
-    sendHttp();
-    sendSys();
+    const metricArray = [];
+    httpMetrics(metricArray);
+    sysMetrics(metricArray);
+    userMetrics(metricArray);
+    sendMetricToGrafana(metricArray);
 }, 10000);
 
-function sendMetricToGrafana(metricName, metricValue, attributes) {
+function sendMetricToGrafana(metricArray) {
   const metric = {
     resourceMetrics: [
       {
         scopeMetrics: [
           {
-            metrics: [
-              {
-                name: metricName,
-                unit: '1',
-                sum: {
-                  dataPoints: [
-                    {
-                      asInt: metricValue,
-                      timeUnixNano: Date.now() * 1000000,
-                      attributes: [],
-                    },
-                  ],
-                  aggregationTemporality: 'AGGREGATION_TEMPORALITY_CUMULATIVE',
-                  isMonotonic: true,
-                },
-              },
-            ],
+            metrics: metricArray
           },
         ],
       },
@@ -102,7 +111,7 @@ function sendMetricToGrafana(metricName, metricValue, attributes) {
       if (!response.ok) {
         console.error('Failed to push metrics data to Grafana');
       } else {
-        console.log(`Pushed ${metricName}`);
+        console.log(`Pushed ${metricArray.length} metrics successfully`);
       }
     })
     .catch((error) => {
