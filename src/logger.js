@@ -37,6 +37,10 @@ function factoryLogger(reqBody, resBody, statusCode) {
     log(level, 'http', logData);
 }
 
+function dbLogger(sql) {
+    log('info', 'db', {reqBody: sql});
+}
+
 function log(level, type, logData) {
     const labels = { component: config.logging.source, level: level, type: type };
     const values = [nowString(), sanitize(logData)];
@@ -74,4 +78,4 @@ function sendLogToGrafana(event) {
     });
 }
 
-module.exports = { httpLogger, factoryLogger };
+module.exports = { httpLogger, factoryLogger, dbLogger };
