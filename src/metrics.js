@@ -181,9 +181,7 @@ function sendMetricToGrafana(metricArray) {
     .then((response) => {
       if (!response.ok) {
         console.error('Failed to push metrics data to Grafana');
-      } else {
-        console.log(`Pushed ${metricArray.length} metrics successfully`);
-      }
+      } 
     })
     .catch((error) => {
       console.error('Error pushing metrics:', error);

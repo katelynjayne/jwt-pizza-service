@@ -1,23 +1,41 @@
 const config = require('./config.js');
 
 function httpLogger(req, res, next) {
-    let send = res.send;
-    res.send = (resBody) => {
-      const logData = {
-        authorized: !!req.headers.authorization,
-        path: req.originalUrl,
-        method: req.method,
-        statusCode: res.statusCode,
-        reqBody: JSON.stringify(req.body),
-        resBody: JSON.stringify(resBody),
-      };
-      const level = statusToLogLevel(res.statusCode);
-      log(level, 'http', logData);
-      res.send = send;
-      return res.send(resBody);
-    };
-    next();
+    try {
+        let send = res.send;
+        res.send = (resBody) => {
+            const logData = {
+                authorized: !!req.headers.authorization,
+                path: req.originalUrl,
+                method: req.method,
+                statusCode: res.statusCode,
+                reqBody: JSON.stringify(req.body),
+                resBody: JSON.stringify(resBody),
+            };
+            const level = statusToLogLevel(res.statusCode);
+            log(level, 'http', logData);
+            res.send = send;
+            return res.send(resBody);
+        };
+        next();
+    } catch (error) {
+        log('error', 'exception', {message:error.message});
+    }  
 };
+
+function factoryLogger(reqBody, resBody, statusCode) {
+    resBody.jwt = "***";
+    const logData = {
+        authorized: true,
+        path: `${config.factory.url}/api/order`,
+        method: 'POST',
+        statusCode: statusCode,
+        reqBody: reqBody,
+        resBody: JSON.stringify(resBody)
+    }
+    const level = statusToLogLevel(statusCode);
+    log(level, 'http', logData);
+}
 
 function log(level, type, logData) {
     const labels = { component: config.logging.source, level: level, type: type };
@@ -56,4 +74,4 @@ function sendLogToGrafana(event) {
     });
 }
 
-module.exports = { httpLogger };
+module.exports = { httpLogger, factoryLogger };
