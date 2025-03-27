@@ -24,7 +24,6 @@ function httpLogger(req, res, next) {
 };
 
 function factoryLogger(reqBody, resBody, statusCode) {
-    resBody.jwt = "***";
     const logData = {
         authorized: true,
         path: `${config.factory.url}/api/order`,
@@ -61,7 +60,7 @@ function nowString() {
 
 function sanitize(logData) {
     logData = JSON.stringify(logData);
-    return logData.replace(/\\"password\\":\s*\\"[^"]*\\"/g, '\\"password\\": \\"*****\\"');
+    return logData.replace(/\\"password\\":\s*\\"[^"]*\\"/g, '\\"password\\": \\"*****\\"').replace(/\\"jwt\\":\s*\\"[^"]*\\"/g, '\\"jwt\\": \\"*****\\"');
 }
 
 function sendLogToGrafana(event) {
