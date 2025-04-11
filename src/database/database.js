@@ -80,18 +80,8 @@ class DB {
   async updateUser(userId, email, password) {
     const connection = await this.getConnection();
     try {
-      const params = [];
-      if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        params.push(`password='${hashedPassword}'`);
-      }
-      if (email) {
-        params.push(`email='${email}'`);
-      }
-      if (params.length > 0) {
-        const query = `UPDATE user SET ${params.join(', ')} WHERE id=${userId}`;
-        await this.query(connection, query);
-      }
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await this.query(connection, `UPDATE user SET email=?, password=? WHERE id=?`,[email,hashedPassword,userId]);
       return this.getUser(email, password);
     } finally {
       connection.end();
@@ -326,7 +316,7 @@ class DB {
       try {
         const dbExists = await this.checkDatabaseExists(connection);
         console.log(dbExists ? 'Database exists' : 'Database does not exist, creating it');
-        
+
         await connection.query(`CREATE DATABASE IF NOT EXISTS ${config.db.connection.database}`);
         await connection.query(`USE ${config.db.connection.database}`);
 
