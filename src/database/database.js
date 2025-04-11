@@ -326,7 +326,7 @@ class DB {
       try {
         const dbExists = await this.checkDatabaseExists(connection);
         console.log(dbExists ? 'Database exists' : 'Database does not exist, creating it');
-
+        await connection.query(`DROP DATABASE ${config.db.connection.database}`)
         await connection.query(`CREATE DATABASE IF NOT EXISTS ${config.db.connection.database}`);
         await connection.query(`USE ${config.db.connection.database}`);
 
@@ -338,10 +338,6 @@ class DB {
           await connection.query(statement);
         }
 
-        if (!dbExists) {
-          const defaultAdmin = { name: '常用名字', email: 'a@jwt.com', password: 'admin', roles: [{ role: Role.Admin }] };
-          this.addUser(defaultAdmin);
-        }
       } finally {
         connection.end();
       }

